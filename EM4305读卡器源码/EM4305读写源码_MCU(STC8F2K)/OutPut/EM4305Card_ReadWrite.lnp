@@ -1,0 +1,10 @@
+".\OutPut\STARTUP.obj",
+".\OutPut\Uart.obj",
+".\OutPut\CopyEM4100.obj",
+".\OutPut\EM41xx.obj",
+".\OutPut\EMReadWriteCard.obj",
+".\OutPut\mian.obj",
+".\OutPut\T5557.obj",
+".\OutPut\CRC16.obj" 
+TO ".\OutPut\EM4305Card_ReadWrite" 
+PRINT(".\Listing\EM4305Card_ReadWrite.m51") RAMSIZE(256) 

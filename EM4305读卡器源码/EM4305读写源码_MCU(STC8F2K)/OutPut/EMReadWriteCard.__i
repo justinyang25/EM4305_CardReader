@@ -1,0 +1,1 @@
+"User\EMReadWriteCard.c" BROWSE INCDIR(.\Header) DEBUG OBJECTEXTEND PRINT(.\Listing\EMReadWriteCard.lst) TABS (2) OBJECT(.\OutPut\EMReadWriteCard.obj)

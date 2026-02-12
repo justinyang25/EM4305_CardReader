@@ -1,0 +1,363 @@
+C51 COMPILER V9.55   MIAN                                                                  05/07/2021 16:04:07 PAGE 1   
+
+
+C51 COMPILER V9.55, COMPILATION OF MODULE MIAN
+OBJECT MODULE PLACED IN .\OutPut\mian.obj
+COMPILER INVOKED BY: C:\Program Files\Keil_v5\C51\BIN\C51.EXE User\mian.c BROWSE INCDIR(.\Header) DEBUG OBJECTEXTEND PRI
+                    -NT(.\Listing\mian.lst) TABS(2) OBJECT(.\OutPut\mian.obj)
+
+line level    source
+
+   1          #include"STC8F.h"
+   2          #include"IntPut_IO.h"
+   3          #include"Uart.h"
+   4          #include"EM41xx.h"
+   5          #include"EMReadWriteCard.h"
+   6          #include"CopyEM4100.h"
+   7          #include"CRC16.h"
+   8          
+   9          bit LED_flag = 0;
+  10          unsigned int  Time_Up = 0;
+  11          unsigned int  EM_Wait = 0;
+  12          
+  13          void Delay125us(void)     //@24.000MHz
+  14          {
+  15   1          unsigned char i, j;
+  16   1        
+  17   1          _nop_();
+  18   1          _nop_();
+  19   1          i = 4;
+  20   1          j = 128;
+  21   1          do
+  22   1          {
+  23   2              while (--j);
+  24   2          }while (--i);
+  25   1      }
+  26          void Delay100ms(void)    //@22.1184MHz
+  27          {
+  28   1          unsigned char i, j, k;
+  29   1      
+  30   1          i = 12;
+  31   1          j = 57;
+  32   1          k = 122;
+  33   1          do
+  34   1          {
+  35   2              do
+  36   2              {
+  37   3                  while (--k);
+  38   3              }while (--j);
+  39   2          }while (--i);
+  40   1      }
+  41          //========================================================================
+  42          // º¯Êý: void BP_BP(unsigned char Counter,bit Mode) 
+  43          // ÃèÊö: ·äÃùÆ÷º¯Êý
+  44          // ²ÎÊý: Counter£º ´ÎÊý   Mode£º1³¤Ïì 0¶ÌÏìº
+  45          // ·µ»Ø: 
+  46          // °æ±¾: V1.0, 2017-9-23
+  47          //========================================================================
+  48          void BP_BP(unsigned char Counter,bit Mode)  
+  49          {
+  50   1          unsigned char x;
+  51   1          unsigned int y,CheckCount = 0;
+  52   1        
+  53   1          CheckCount = 200;
+  54   1          if(Mode)  CheckCount = 1000;
+C51 COMPILER V9.55   MIAN                                                                  05/07/2021 16:04:07 PAGE 2   
+
+  55   1        
+  56   1          EA = 0;
+  57   1          for(x = 0; x < Counter; x++)
+  58   1          {
+  59   2              for(y = 0;y < CheckCount;y ++)
+  60   2              {
+  61   3                  BP = !BP;
+  62   3                  Delay125us();
+  63   3              }
+  64   2              BP = 0;
+  65   2              if(x == (Counter - 1))  break;
+  66   2              Delay100ms();
+  67   2          }
+  68   1          EA = 1; 
+  69   1      }
+  70          
+  71          void Timer3InIt(void)    //¶¨Ê±1ms
+  72          {  
+  73   1          T3L = 0x30;          //65536-11.0592M/12/1000
+  74   1          T3H = 0xF8;
+  75   1          T4T3M = 0x08;        //Æô¶¯¶¨Ê±Æ÷ 12TÄ£Ê½
+  76   1          IE2 = ET3;           //Ê¹ÄÜ¶¨Ê±Æ÷ÖÐ¶Ï
+  77   1      }
+  78          void SYS_InIt(void)
+  79          {
+  80   1          BP = 0;
+  81   1          LED = 0;
+  82   1          LED1 = 1;
+  83   1          T1CLK = 0;
+  84   1          INPORT = 1;
+  85   1        
+  86   1          P1M0 = 0x4C;           //0100 1100
+  87   1          P1M1 = 0x00;  
+  88   1          P3M0 = 0x12;           //0001 0010
+  89   1          P3M1 = 0x00;           //0000 0000
+  90   1        
+  91   1          UartInit(); 
+  92   1          Timer3InIt();
+  93   1          T1Clk_Out(125);        //Ê±ÖÓÊä³ö125K
+  94   1          RFID_Timer0InIt();     //¶¨Ê±Æ÷0³õÊ¼»¯£¬ÓÃÓÚRFID½ÅµçÆ½¼ÆÊý
+  95   1          BP_BP(1,0);
+  96   1      }
+  97          
+  98          void main(void)
+  99          {
+ 100   1          union 
+ 101   1          {
+ 102   1              unsigned int  _uint;          
+ 103   1              unsigned char B[2];
+ 104   1          }xdata CRC16_Base;  
+ 105   1          union 
+ 106   1          {
+ 107   1              unsigned int  _uint;          
+ 108   1              unsigned char B[2];
+ 109   1          }xdata Block_Base;
+ 110   1          union 
+ 111   1          {
+ 112   1              unsigned long uL;         
+ 113   1              unsigned char B[4];
+ 114   1          }xdata BankData;  
+ 115   1          
+ 116   1          unsigned char i,j;
+C51 COMPILER V9.55   MIAN                                                                  05/07/2021 16:04:07 PAGE 3   
+
+ 117   1          unsigned char Uart_Len;
+ 118   1          unsigned char xdata Uart_Buff[40]= {0};
+ 119   1          unsigned char xdata ListEM4100UID[5] = {0};
+ 120   1          unsigned char xdata Read_PLL = 0;
+ 121   1          unsigned char xdata WriteCount = 0;
+ 122   1            
+ 123   1          SYS_InIt();
+ 124   1        
+ 125   1          while(1)
+ 126   1          {
+ 127   2              if(cmdArrived)  
+ 128   2              {
+ 129   3                  cmdArrived = 0;
+ 130   3                  Uart_Len = UartRead(Uart_Buff, sizeof(Uart_Buff));  //½«½ÓÊÕµ½Êý¾Ý¶ÁÈ¡µ½»º´æ
+ 131   3                  if((Uart_Buff[0] == 0xAA) && (Uart_Buff[Uart_Len - 1] == 0xEE)) //ºÏ¸ñµÄÊý¾ÝÍ·ºÍÎ²
+ 132   3                  {
+ 133   4                      CRC16_Base._uint = GetCRC16(Uart_Buff, Uart_Len - 3);  
+ 134   4                      if((Uart_Buff[Uart_Len - 2] == CRC16_Base.B[0]) && (Uart_Buff[Uart_Len - 3] == CRC16_Base.B[1])) /
+             -/CRC16Ð£ÑéÕýÈ·
+ 135   4                      { 
+ 136   5                          LED = 1;
+ 137   5                          if((Uart_Buff[1] == 0xFF) && (Uart_Buff[2] == 0xFF))   //Áª»ú
+ 138   5                          {
+ 139   6                              LED_flag = 1;
+ 140   6                              BP_BP(1,0);
+ 141   6                          }
+ 142   5                          else
+ 143   5                          {
+ 144   6                              switch(Uart_Buff[1])
+ 145   6                              {
+ 146   7                                  case 0xF0:Read_PLL = Uart_Buff[2];
+ 147   7                                            for(i = 0; i < 2; i ++) Block_Base.B[i] = Uart_Buff[3 + i]; //µØÖ·
+ 148   7                                            for(i = 0; i < 16; i ++) 
+ 149   7                                            {
+ 150   8                                                if(Block_Base._uint & 0x0001)    //¼ì²â¶ÁµÄµØÖ·
+ 151   8                                                {
+ 152   9                                                    Uart_Buff[2] = ReadWriteEM4305(ReadCom,i,0,Read_PLL);
+ 153   9                                                    Uart_Buff[3] = i;
+ 154   9                                                    Uart_Len = 4; 
+ 155   9                                                    if(Uart_Buff[2])
+ 156   9                                                    {
+ 157  10                                                        for(j = 0; j < 4; j ++)  Uart_Buff[Uart_Len ++] = EM_Buff[j];
+ 158  10                                                        BP_BP(1,0);
+ 159  10                                                    }
+ 160   9                                                    else
+ 161   9                                                    {
+ 162  10                                                        for(j = 0; j < 4; j ++)  Uart_Buff[Uart_Len ++] = 0;
+ 163  10                                                        BP_BP(2,0);                                               
+ 164  10                                                    }
+ 165   9                                                    CRC16_Base._uint = GetCRC16(Uart_Buff,Uart_Len);  
+ 166   9                                                    Uart_Buff[Uart_Len ++] = CRC16_Base.B[0];
+ 167   9                                                    Uart_Buff[Uart_Len ++] = CRC16_Base.B[1];
+ 168   9                                                    Uart_Buff[Uart_Len ++] = 0xEE;
+ 169   9                                                    UartWrite(Uart_Buff,Uart_Len);   //·µ»ØÊý¾Ý   
+ 170   9                                                    EM_Wait = 100;
+ 171   9                                                    while(EM_Wait > 0);                                             
+ 172   9                                                }
+ 173   8                                                Block_Base._uint = Block_Base._uint >> 1;
+ 174   8                                            }
+ 175   7                                            break;
+ 176   7                                  case 0xF1:for(i = 0; i < 2; i ++) Block_Base.B[i] = Uart_Buff[2 + i]; //µØÖ·
+ 177   7                                            WriteCount = 0;
+C51 COMPILER V9.55   MIAN                                                                  05/07/2021 16:04:07 PAGE 4   
+
+ 178   7                                            for(i = 0; i < 16; i ++)
+ 179   7                                            {
+ 180   8                                                if(Block_Base._uint & 0x0001)    //¼ì²âÐ´µÄµØÖ·
+ 181   8                                                {
+ 182   9                                                    for(j = 0; j < 4; j ++) BankData.B[3 - j] = Uart_Buff[4 + (WriteCount * 4) + j];
+ 183   9                                                    WriteCount ++;
+ 184   9                                                    Uart_Buff[2] = ReadWriteEM4305(WriteCom,i,BankData.uL,Read_PLL);
+ 185   9                                                    Uart_Buff[3] = i;
+ 186   9                                                    Uart_Len = 4;
+ 187   9                                                    if(Uart_Buff[2])
+ 188   9                                                    {
+ 189  10                                                        BP_BP(1,0);
+ 190  10                                                    }
+ 191   9                                                    else
+ 192   9                                                    {
+ 193  10                                                        BP_BP(2,0);                                               
+ 194  10                                                    }
+ 195   9                                                    CRC16_Base._uint = GetCRC16(Uart_Buff,Uart_Len);  
+ 196   9                                                    Uart_Buff[Uart_Len ++] = CRC16_Base.B[0];
+ 197   9                                                    Uart_Buff[Uart_Len ++] = CRC16_Base.B[1];
+ 198   9                                                    Uart_Buff[Uart_Len ++] = 0xEE;
+ 199   9                                                    UartWrite(Uart_Buff,Uart_Len);   //·µ»ØÊý¾Ý   
+ 200   9                                                }
+ 201   8                                                Block_Base._uint = Block_Base._uint >> 1;
+ 202   8                                            }
+ 203   7                                            break;
+ 204   7                                  case 0xF2:        //ÑéÖ¤ÃÜÂë µÇÂ¼ÃüÁî
+ 205   7                                            for(j = 0; j < 4; j ++) BankData.B[3 - j] = Uart_Buff[4 + j];
+ 206   7                                            Uart_Buff[2] = ReadWriteEM4305(LoginCom,4,BankData.uL,Read_PLL);
+ 207   7                                            Uart_Len = 3;
+ 208   7                                            if(Uart_Buff[2])
+ 209   7                                            {
+ 210   8                                                BP_BP(1,0);
+ 211   8                                            }
+ 212   7                                            else
+ 213   7                                            {
+ 214   8                                                BP_BP(2,0);                                               
+ 215   8                                            }
+ 216   7                                            CRC16_Base._uint = GetCRC16(Uart_Buff,Uart_Len);  
+ 217   7                                            Uart_Buff[Uart_Len ++] = CRC16_Base.B[0];
+ 218   7                                            Uart_Buff[Uart_Len ++] = CRC16_Base.B[1];
+ 219   7                                            Uart_Buff[Uart_Len ++] = 0xEE;
+ 220   7                                            UartWrite(Uart_Buff,Uart_Len);   //·µ»ØÊý¾Ý                             
+ 221   7                                            break;
+ 222   7                                  case 0xF3:Carrier_On();         //´ò¿ª´Å³¡  ¶ÁEM4100¿¨
+ 223   7                                            EM_Wait = 1000;
+ 224   7                                            Uart_Buff[1] = 0xF3;
+ 225   7                                            Uart_Buff[2] = 0;
+ 226   7                                            Uart_Len = 3; 
+ 227   7                                            while(EM_Wait > 0)
+ 228   7                                            {
+ 229   8                                                if(ReadEM41xxCardNo())
+ 230   8                                                {
+ 231   9                                                    Uart_Buff[2] = 1;
+ 232   9                                                    BP_BP(1,0);
+ 233   9                                                    for(i = 0; i < 5; i ++) Uart_Buff[Uart_Len ++] = ID[i];
+ 234   9                                                    break;
+ 235   9                                                }
+ 236   8                                            }
+ 237   7                                            if(Uart_Buff[2] == 0)
+ 238   7                                            {
+ 239   8                                                BP_BP(2,0);
+C51 COMPILER V9.55   MIAN                                                                  05/07/2021 16:04:07 PAGE 5   
+
+ 240   8                                                for(i = 0; i < 5; i ++) Uart_Buff[Uart_Len ++] = 0;                                     
+ 241   8                                            }
+ 242   7                                            CRC16_Base._uint = GetCRC16(Uart_Buff,Uart_Len);  
+ 243   7                                            Uart_Buff[Uart_Len ++] = CRC16_Base.B[0];
+ 244   7                                            Uart_Buff[Uart_Len ++] = CRC16_Base.B[1];
+ 245   7                                            Uart_Buff[Uart_Len ++] = 0xEE;
+ 246   7                                            UartWrite(Uart_Buff,Uart_Len);   //·µ»ØÊý¾Ý                                         
+ 247   7                                            break;
+ 248   7                                  case 0xF4:        //¸´ÖÆEM4100              
+ 249   7                                            for(i = 0; i < 5; i ++)
+ 250   7                                            {
+ 251   8                                                Buff[i] = Uart_Buff[3 + i];
+ 252   8                                                ListEM4100UID[i] = Buff[i];
+ 253   8                                            }
+ 254   7                                            switch(Uart_Buff[2])
+ 255   7                                            {
+ 256   8                                                case 0:         //»ù¿¨ÊÇ57¿¨
+ 257   8                                                        T5557CopyEM4100(Buff);
+ 258   8                                                      break;
+ 259   8                                                case 1:         //»ù¿¨ÊÇ43¿¨
+ 260   8                                                        EM4305CopyEM4100(Buff);
+ 261   8                                                        ReadWriteEM4305(ReadCom,0,0,64);
+ 262   8                                                      break;
+ 263   8                                            }
+ 264   7                                            Carrier_Off();  
+ 265   7                                            EM_Wait = 100;
+ 266   7                                            while(EM_Wait > 0);
+ 267   7                                            
+ 268   7                                            Carrier_On();         //´ò¿ª´Å³¡  
+ 269   7                                            EM_Wait = 1000;
+ 270   7                                            Uart_Buff[1] = 0xF4;
+ 271   7                                            Uart_Buff[2] = 0;
+ 272   7                                            Uart_Len = 3; 
+ 273   7                                            while(EM_Wait > 0)
+ 274   7                                            {
+ 275   8                                                if(ReadEM41xxCardNo())   //¶Á³öÀ´±È½Ï
+ 276   8                                                {
+ 277   9                                                    for(i = 0; i < 5; i ++)
+ 278   9                                                    {
+ 279  10                                                        if(ID[i] != ListEM4100UID[i])  break;
+ 280  10                                                    }
+ 281   9                                                    if(i == 5)
+ 282   9                                                    {
+ 283  10                                                        Uart_Buff[2] = 1;
+ 284  10                                                        BP_BP(1,0);
+ 285  10                                                        for(i = 0; i < 5; i ++) Uart_Buff[Uart_Len ++] = ID[i];
+ 286  10                                                    }
+ 287   9                                                    break;
+ 288   9                                                }
+ 289   8                                            }
+ 290   7                                            if(Uart_Buff[2] == 0)        //´íÎó
+ 291   7                                            {
+ 292   8                                                BP_BP(2,0);
+ 293   8                                                for(i = 0; i < 5; i ++) Uart_Buff[Uart_Len ++] = 0;                                     
+ 294   8                                            }
+ 295   7                                            CRC16_Base._uint = GetCRC16(Uart_Buff,Uart_Len);  
+ 296   7                                            Uart_Buff[Uart_Len ++] = CRC16_Base.B[0];
+ 297   7                                            Uart_Buff[Uart_Len ++] = CRC16_Base.B[1];
+ 298   7                                            Uart_Buff[Uart_Len ++] = 0xEE;
+ 299   7                                            UartWrite(Uart_Buff,Uart_Len);   //·µ»ØÊý¾Ý                                         
+ 300   7                                            break;
+ 301   7                                  case 0xF5:        //ÐÝÃß¿¨Æ¬
+C51 COMPILER V9.55   MIAN                                                                  05/07/2021 16:04:07 PAGE 6   
+
+ 302   7                                            ReadWriteEM4305(DisableCom,0,BankData.uL,Read_PLL);
+ 303   7                                            BP_BP(1,0);
+ 304   7                                            break;
+ 305   7                                  default:
+ 306   7                                            break;
+ 307   7                              }
+ 308   6                          } 
+ 309   5                          LED = 0;
+ 310   5                      }
+ 311   4                  }
+ 312   3              }
+ 313   2          }
+ 314   1      }
+ 315          
+ 316          void TM3_Isr() interrupt 19 using 1
+ 317          {
+ 318   1          AUXINTIF &= ~0x02;              //Çå³ýÖÐ¶Ï±êÖ¾
+ 319   1        
+ 320   1          Uart1RxMonitor(1);
+ 321   1          if(LED_flag)  Time_Up ++;
+ 322   1          if(Time_Up >= 500)
+ 323   1          {
+ 324   2              Time_Up = 0;
+ 325   2              LED1 = ~LED1;         
+ 326   2          }
+ 327   1          if(EM_Wait > 0) EM_Wait --;
+ 328   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1673    ----
+   CONSTANT SIZE    =     45    ----
+   XDATA SIZE       =   ----      55
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      4       3
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

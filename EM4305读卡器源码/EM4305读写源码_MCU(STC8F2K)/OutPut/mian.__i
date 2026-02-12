@@ -1,0 +1,1 @@
+"User\mian.c" BROWSE INCDIR(.\Header) DEBUG OBJECTEXTEND PRINT(.\Listing\mian.lst) TABS (2) OBJECT(.\OutPut\mian.obj)

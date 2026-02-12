@@ -1,0 +1,137 @@
+C51 COMPILER V9.55   COPYEM4100                                                            05/07/2021 15:49:23 PAGE 1   
+
+
+C51 COMPILER V9.55, COMPILATION OF MODULE COPYEM4100
+OBJECT MODULE PLACED IN .\OutPut\CopyEM4100.obj
+COMPILER INVOKED BY: C:\Program Files\Keil_v5\C51\BIN\C51.EXE User\CopyEM4100.c BROWSE INCDIR(.\Header) DEBUG OBJECTEXTE
+                    -ND PRINT(.\Listing\CopyEM4100.lst) TABS(2) OBJECT(.\OutPut\CopyEM4100.obj)
+
+line level    source
+
+   1          #include"CopyEM4100.h"
+   2          #include"EMReadWriteCard.h"
+   3          
+   4          unsigned long Write_Buf[2];     //写入的数据
+   5          
+   6          void CopyEM4100Uid(unsigned char *buf)
+   7          {
+   8   1          unsigned char x,j;
+   9   1          unsigned char _Uid[11];
+  10   1          
+  11   1          for(x = 0;x < 5;x ++)
+  12   1          { 
+  13   2              _Uid[x * 2]     = buf[x] & 0xf0;  //清低4位
+  14   2              _Uid[x * 2 + 1] = buf[x] << 4;    //得到低四位
+  15   2          }
+  16   1      
+  17   1          for(x = 0;x < 10;x ++)                //行校验数据生成
+  18   1          {
+  19   2            if((((_Uid[x] >> 4) ^
+  20   2                 (_Uid[x] >> 3) ^
+  21   2                 (_Uid[x] >> 2) ^
+  22   2                 (_Uid[x] >> 1) ^
+  23   2                  _Uid[x]) & 0x08) != 0)
+  24   2              _Uid[x] = _Uid[x] | 0x08;    //将第5位置1
+  25   2          }
+  26   1          j = 0;
+  27   1          for(x = 0;x < 11;x ++)  j = j ^ (_Uid[x] & 0x80);          //列校验数据生成
+  28   1          if(j != 0)  _Uid[10] = _Uid[10] | 0x80; 
+  29   1          j = 0;
+  30   1          for(x = 0;x < 11;x ++)  j = j ^ (_Uid[x] & 0x40);
+  31   1          if(j != 0)  _Uid[10] = _Uid[10] | 0x40;
+  32   1          j = 0;
+  33   1          for(x = 0;x < 11;x ++)  j = j ^ (_Uid[x] & 0x20);
+  34   1          if(j != 0)  _Uid[10] = _Uid[10] | 0x20;
+  35   1          j = 0;
+  36   1          for(x = 0;x < 11;x ++)  j = j ^ (_Uid[x] & 0x10);
+  37   1          if(j !=0 )  _Uid[10] = _Uid[10] | 0x10;     
+  38   1          for(x = 0;x < 11;x ++)    Buff[x] = _Uid[x];    //转换好的数据，放入Buff缓冲等待合并数据        
+  39   1      }
+  40          
+  41          void Write_DataManage(void)
+  42          { 
+  43   1          Write_Buf[1] = 0;                         
+  44   1          Write_Buf[0] = 0x000001FF;    // 0000 0000 0000 0000  0000 0001 1111 1111
+  45   1          Write_Buf[0] = (Write_Buf[0] << 5) | (Buff[0] >> 3); 
+  46   1          Write_Buf[0] = (Write_Buf[0] << 5) | (Buff[1] >> 3);
+  47   1          Write_Buf[0] = (Write_Buf[0] << 5) | (Buff[2] >> 3);
+  48   1          Write_Buf[0] = (Write_Buf[0] << 5) | (Buff[3] >> 3);
+  49   1          Write_Buf[0] = (Write_Buf[0] << 3) | (Buff[4] >> 5);
+  50   1          Write_Buf[1] = (Buff[4] >> 3) & 0x03;                   
+  51   1          Write_Buf[1] = (Write_Buf[1] << 5) | (Buff[5] >> 3);    
+  52   1          Write_Buf[1] = (Write_Buf[1] << 5) | (Buff[6] >> 3);  
+  53   1          Write_Buf[1] = (Write_Buf[1] << 5) | (Buff[7] >> 3);  
+  54   1          Write_Buf[1] = (Write_Buf[1] << 5) | (Buff[8] >> 3);  
+C51 COMPILER V9.55   COPYEM4100                                                            05/07/2021 15:49:23 PAGE 2   
+
+  55   1          Write_Buf[1] = (Write_Buf[1] << 5) | (Buff[9] >> 3);  
+  56   1          Write_Buf[1] = (Write_Buf[1] << 5) | (Buff[10] >> 3); 
+  57   1      }
+  58          
+  59          void EM4305CopyEM4100(unsigned char *buf)
+  60          {
+  61   1          unsigned char x,y;
+  62   1          unsigned char xdata buff_x[8] = {0};  
+  63   1          union 
+  64   1          {
+  65   1              unsigned long uL;         
+  66   1              unsigned char B[4];
+  67   1          }xdata BankData;
+  68   1          
+  69   1          CopyEM4100Uid(buf);
+  70   1          Write_DataManage();
+  71   1          for(x = 0;x < 4;x ++) //移位
+  72   1          {
+  73   2              for(y = 0;y < 8;y ++)
+  74   2              {
+  75   3                  buff_x[x] = buff_x[x] >> 1;
+  76   3                  Write_Buf[0] = Write_Buf[0] << 1;
+  77   3                  if(CY) buff_x[x] = buff_x[x]|0x80;
+  78   3              } 
+  79   2          }
+  80   1          for(x = 4;x < 8; x ++)  //移位
+  81   1          {
+  82   2              for(y = 0;y < 8;y ++)
+  83   2              {
+  84   3                  buff_x[x] = buff_x[x] >> 1;
+  85   3                  Write_Buf[1] = Write_Buf[1] << 1;
+  86   3                  if(CY) buff_x[x] = buff_x[x]|0x80;
+  87   3              } 
+  88   2          }
+  89   1          ReadWriteEM4305(WriteCom,4,0x5F800100,64);
+  90   1          Delay_8nus(6250);
+  91   1          for(x = 0;x < 4;x ++)   BankData.B[x] = buff_x[x];
+  92   1          ReadWriteEM4305(WriteCom,5,BankData.uL,64);
+  93   1          Delay_8nus(6250);
+  94   1          for(x = 0;x < 4;x ++)   BankData.B[x] = buff_x[4 + x];
+  95   1          ReadWriteEM4305(WriteCom,6,BankData.uL,64);
+  96   1          Delay_8nus(6250);
+  97   1      }
+  98          
+  99          void T5557CopyEM4100(unsigned char *buf)
+ 100          {
+ 101   1          CopyEM4100Uid(buf);
+ 102   1          Write_DataManage();
+ 103   1          Standard_Write(0,E5557_Config);     //写配置块
+ 104   1          Delay_8nus(1250);
+ 105   1          Standard_Write(1,Write_Buf[0]);     //写0页第一块
+ 106   1          Delay_8nus(1250);
+ 107   1          Standard_Write(2,Write_Buf[1]);     //写0页第二块   
+ 108   1          Delay_8nus(1250); 
+ 109   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1122    ----
+   CONSTANT SIZE    =      8    ----
+   XDATA SIZE       =   ----      12
+   PDATA SIZE       =   ----    ----
+C51 COMPILER V9.55   COPYEM4100                                                            05/07/2021 15:49:23 PAGE 3   
+
+   DATA SIZE        =      8      18
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
